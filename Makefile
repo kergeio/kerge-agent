@@ -6,7 +6,7 @@ SHELLCHECK_IMAGE := koalaman/shellcheck:v0.11.0
 SHELL_SCRIPTS := scripts/install-agent.sh scripts/check-no-exec.sh scripts/test-install-agent.sh scripts/testdata/install-cases.sh
 VERSION ?= dev
 
-.PHONY: all build test lint fmt-check vet langcheck no-exec shellcheck install-test commitcheck vuln check clean
+.PHONY: all build test lint fmt-check vet langcheck no-exec shellcheck install-test commitcheck dcocheck vuln check clean
 
 all: check
 
@@ -50,12 +50,16 @@ install-test:
 commitcheck:
 	set -o pipefail; git log -z --format='%H%n%B' | $(GO) run ./tools/langcheck commits
 
+## dcocheck: check that every commit carries a DCO sign-off by its author
+dcocheck:
+	set -o pipefail; git log -z --no-merges --format='%H%n%an <%ae>%n%B' | $(GO) run ./tools/dcocheck
+
 ## vuln: scan dependencies for known vulnerabilities
 vuln:
 	$(GO) run $(GOVULNCHECK) ./...
 
 ## check: everything CI runs
-check: lint test vuln commitcheck build
+check: lint test vuln commitcheck dcocheck build
 
 clean:
 	rm -rf $(BIN)
