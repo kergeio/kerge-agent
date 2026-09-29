@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest a change to the agent.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The agent only reports metrics over one outbound connection. These
+        are out of scope and will not be added: listening on a port, running
+        commands or starting processes, accepting binaries, scripts or
+        configuration from the panel, and updating itself.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What would you like the agent to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways you have considered or use today.

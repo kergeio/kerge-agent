@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Panel issues
+    url: https://github.com/kergeio/kerge-panel/issues
+    about: Problems with the panel, its pages or its deployment.
+  - name: Protocol issues
+    url: https://github.com/kergeio/kerge-protocol/issues
+    about: Questions about the protocol between the agent and the panel.

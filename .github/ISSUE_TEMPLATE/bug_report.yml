@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in the agent or its installer does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Before you paste logs or
+        configuration, remove IP addresses, tokens and anything else you
+        would not post publicly.
+  - type: input
+    id: version
+    attributes:
+      label: Agent version
+      description: Output of `kerge-agent --version`.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: panel-version
+    attributes:
+      label: Panel version
+      placeholder: v0.1.0
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Distribution, kernel and architecture of the monitored host.
+      placeholder: Debian 13, kernel 6.12, amd64
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output of `journalctl -u kerge-agent`, or of the installer if the problem is in installing.
+      render: text
