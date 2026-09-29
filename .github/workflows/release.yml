@@ -1,0 +1,86 @@
+name: Release
+
+# Pushing a version tag on a commit of main publishes a release: the agent
+# binaries, install-agent.sh with the version written in, checksums.txt and
+# its OpenSSH signature. A tag with a suffix (v1.2.3-rc.1) makes a
+# pre-release, which never becomes the latest release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Tag on main, CI passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/release-preflight.sh "$GITHUB_REF_NAME"
+
+      - name: Check
+        run: make check
+
+  release:
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: ./scripts/release-assets.sh "${GITHUB_REF_NAME#v}" dist
+
+      - name: Sign
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          key="$RUNNER_TEMP/release-key"
+          trap 'rm -f "$key"' EXIT
+          (umask 077 && printf '%s\n' "$RELEASE_SIGNING_KEY" >"$key")
+          ssh-keygen -Y sign -q -f "$key" -n kerge-release dist/checksums.txt
+
+      - name: Verify
+        run: ./scripts/release-verify.sh dist
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sum="$(sed -n 's/^\([0-9a-f]\{64\}\)  install-agent\.sh$/\1/p' dist/checksums.txt)"
+          {
+            echo "sha256 of install-agent.sh:"
+            echo
+            echo '```'
+            echo "$sum"
+            echo '```'
+          } >"$RUNNER_TEMP/notes.md"
+          case "$GITHUB_REF_NAME" in
+          *-*) kind=--prerelease ;;
+          *) kind=--latest ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" "$kind"
