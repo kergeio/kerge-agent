@@ -1,8 +1,9 @@
 #!/bin/bash
-# Builds the files of an agent release into an empty directory: the binary
-# for every published platform, install-agent.sh with the release version
-# written in, and checksums.txt over all of them. Signing checksums.txt is
-# left to the caller, which holds the key.
+# Builds the files of an agent release into an empty directory: for every
+# published platform an archive, kerge-agent-<os>-<arch>.tar.gz, holding the
+# binary with LICENSE, NOTICE and THIRD_PARTY_LICENSES; install-agent.sh
+# with the release version written in; and checksums.txt over all of them.
+# Signing checksums.txt is left to the caller, which holds the key.
 #
 # Usage: scripts/release-assets.sh <version> <out-dir>
 #   <version> has no leading "v", for example 0.1.0 or 0.1.0-rc.1.
@@ -34,14 +35,34 @@ main() {
 	[ -z "$(ls -A "$out")" ] || die "$out is not empty"
 	cd "$(dirname "$0")/.."
 
-	local platform os arch
+	local staging
+	staging="$(mktemp -d)"
+	# shellcheck disable=SC2064 # expand now: the variable is local
+	trap "rm -rf '$staging'" EXIT
+	./scripts/third-party-licenses.sh ./cmd/agent >"$staging/THIRD_PARTY_LICENSES"
+
+	# Owner and group of the archived files; GNU tar and bsdtar spell it
+	# differently.
+	local owner=(--uid 0 --gid 0)
+	if tar --version 2>/dev/null | grep -q 'GNU tar'; then
+		owner=(--owner=0 --group=0 --numeric-owner)
+	fi
+
+	local platform os arch dir
 	for platform in "${PLATFORMS[@]}"; do
 		os="${platform%/*}"
 		arch="${platform#*/}"
+		dir="$staging/$os-$arch"
+		mkdir "$dir"
 		echo "release-assets: building kerge-agent-$os-$arch $version"
 		CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath \
 			-ldflags "-X main.version=$version" \
-			-o "$out/kerge-agent-$os-$arch" ./cmd/agent
+			-o "$dir/kerge-agent" ./cmd/agent
+		cp LICENSE NOTICE "$staging/THIRD_PARTY_LICENSES" "$dir/"
+		chmod 0755 "$dir/kerge-agent"
+		chmod 0644 "$dir/LICENSE" "$dir/NOTICE" "$dir/THIRD_PARTY_LICENSES"
+		COPYFILE_DISABLE=1 tar "${owner[@]}" -czf "$out/kerge-agent-$os-$arch.tar.gz" -C "$dir" \
+			kerge-agent LICENSE NOTICE THIRD_PARTY_LICENSES
 	done
 
 	# The script in the repository carries VERSION="dev" and refuses to
@@ -52,7 +73,7 @@ main() {
 		die "could not write the version into install-agent.sh"
 	fi
 
-	(cd "$out" && sha256 kerge-agent-* install-agent.sh >checksums.txt)
+	(cd "$out" && sha256 kerge-agent-*.tar.gz install-agent.sh >checksums.txt)
 	echo "release-assets: done"
 	cat "$out/checksums.txt"
 }

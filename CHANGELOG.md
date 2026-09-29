@@ -28,7 +28,9 @@ The first release, v0.1.0.
   jitter.
 - `install-agent.sh`: installs, reinstalls and uninstalls the agent as a
   systemd service running as the unprivileged user `kerge`, after checking
-  the OpenSSH signature of the release's checksums and the binary's
+  the OpenSSH signature of the release's checksums and the archive's
   checksum.
-- Releases for Linux amd64 and arm64, with `checksums.txt` signed by the
+- Releases for Linux amd64 and arm64 as archives holding the binary and
+  the license texts of all code in it (installed to
+  `/usr/share/doc/kerge-agent/`), with `checksums.txt` signed by the
   release key.

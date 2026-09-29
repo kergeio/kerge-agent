@@ -4,7 +4,7 @@ BIN := bin
 GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@v1.8.0
 SHELLCHECK_IMAGE := koalaman/shellcheck:v0.11.0
 SHELL_SCRIPTS := scripts/install-agent.sh scripts/check-no-exec.sh scripts/test-install-agent.sh scripts/testdata/install-cases.sh \
-	scripts/release-assets.sh scripts/release-verify.sh scripts/release-preflight.sh
+	scripts/release-assets.sh scripts/release-verify.sh scripts/release-preflight.sh scripts/third-party-licenses.sh
 VERSION ?= dev
 
 .PHONY: all build test lint fmt-check vet langcheck no-exec shellcheck install-test commitcheck dcocheck vuln check clean

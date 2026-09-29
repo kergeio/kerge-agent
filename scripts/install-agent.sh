@@ -4,7 +4,8 @@
 # The panel prints the command that downloads and runs this script. Every
 # download is verified twice before anything is installed: the checksums
 # file carries an OpenSSH signature made with the release key, and the
-# binary must match its checksum. Neither check can be skipped.
+# archive with the binary must match its checksum. Neither check can be
+# skipped. The license texts from the archive go to /usr/share/doc.
 #
 # Usage:
 #   install-agent.sh --server wss://panel.example.com/api/agent/ws --token <token>
@@ -30,6 +31,8 @@ readonly CONF_DIR="/etc/kerge-agent"
 readonly CONF_PATH="$CONF_DIR/agent.conf"
 readonly UNIT_PATH="/etc/systemd/system/kerge-agent.service"
 readonly STATE_DIR="/var/lib/kerge-agent"
+readonly DOC_DIR="/usr/share/doc/kerge-agent"
+readonly DOC_FILES=(LICENSE NOTICE THIRD_PARTY_LICENSES)
 
 server=""
 token=""
@@ -117,7 +120,7 @@ detect_arch() {
 require_tools() {
 	local missing=()
 	local tool
-	for tool in curl sha256sum systemctl useradd groupadd install getent sed grep; do
+	for tool in curl sha256sum tar systemctl useradd groupadd install getent sed grep; do
 		command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
 	done
 	[ ${#missing[@]} -eq 0 ] || die "these commands are missing: ${missing[*]}"
@@ -143,7 +146,7 @@ do_install() {
 
 	local arch asset
 	arch="$(detect_arch)"
-	asset="kerge-agent-linux-$arch"
+	asset="kerge-agent-linux-$arch.tar.gz"
 	require_tools
 
 	if [ ! -f "$CONF_PATH" ]; then
@@ -162,10 +165,16 @@ do_install() {
 	download "$asset"
 	verify_signature
 	verify_checksum "$asset"
+	unpack "$asset"
 
 	create_user
-	info "installing $asset $VERSION"
-	install -o root -g root -m 0755 "$workdir/$asset" "$BIN_PATH"
+	info "installing kerge-agent $VERSION for linux/$arch"
+	install -o root -g root -m 0755 "$workdir/unpacked/kerge-agent" "$BIN_PATH"
+	install -d -o root -g root -m 0755 "$DOC_DIR"
+	local doc
+	for doc in "${DOC_FILES[@]}"; do
+		install -o root -g root -m 0644 "$workdir/unpacked/$doc" "$DOC_DIR/$doc"
+	done
 	write_config
 	write_unit
 	start_service
@@ -201,6 +210,16 @@ verify_checksum() {
 	(cd "$workdir" && sha256sum -c --quiet expected) ||
 		die "the checksum of $asset does not match; nothing was installed"
 	info "the checksum of $asset is valid"
+}
+
+# unpack extracts the binary and the license texts, and nothing else, from
+# the verified archive.
+unpack() {
+	local asset="$1"
+	mkdir "$workdir/unpacked"
+	tar -xzf "$workdir/$asset" -C "$workdir/unpacked" kerge-agent "${DOC_FILES[@]}" ||
+		die "$asset does not hold the expected files; nothing was installed"
+	[ -f "$workdir/unpacked/kerge-agent" ] || die "$asset holds no kerge-agent binary; nothing was installed"
 }
 
 create_user() {
@@ -315,14 +334,14 @@ do_uninstall() {
 	rm -f "$UNIT_PATH"
 	systemctl daemon-reload 2>/dev/null || true
 	rm -f "$BIN_PATH"
-	rm -rf "$CONF_DIR" "$STATE_DIR"
+	rm -rf "$CONF_DIR" "$STATE_DIR" "$DOC_DIR"
 	if getent passwd "$RUN_AS" >/dev/null; then
 		userdel "$RUN_AS" 2>/dev/null || true
 	fi
 	if getent group "$RUN_AS" >/dev/null; then
 		groupdel "$RUN_AS" 2>/dev/null || true
 	fi
-	info "the agent, its configuration, its state and its user are gone"
+	info "the agent, its configuration, its state, its license texts and its user are gone"
 }
 
 main "$@"

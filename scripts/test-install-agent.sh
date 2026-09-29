@@ -26,6 +26,7 @@ CASES=(
 	install
 	reinstall
 	bad-checksum
+	incomplete-archive
 	bad-signature
 	no-ssh-keygen
 	unsupported-arch

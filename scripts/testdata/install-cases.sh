@@ -3,8 +3,9 @@
 # container by scripts/test-install-agent.sh. The repository is mounted at
 # /src, read only.
 #
-# The release the installer downloads is built here: a fake binary, a
-# checksums file and an OpenSSH signature over it. Most cases run a copy of
+# The release the installer downloads is built here: an archive with a fake
+# binary and license texts, a checksums file and an OpenSSH signature over
+# it. Most cases run a copy of
 # the installer whose version, download base and release key point at that
 # throwaway release; case_release_key instead keeps the key the script
 # ships with.
@@ -14,6 +15,7 @@ readonly RELEASE_VERSION="1.2.3"
 readonly RELEASE_DIR="/release/v$RELEASE_VERSION"
 readonly INSTALLER="/work/install-agent.sh"
 readonly SYSTEMCTL_LOG="/work/systemctl.log"
+readonly DOC_DIR="/usr/share/doc/kerge-agent"
 
 fail() {
 	echo "FAIL: $*" >&2
@@ -44,14 +46,26 @@ stub_systemctl() {
 	: >"$SYSTEMCTL_LOG"
 }
 
+asset() {
+	echo "kerge-agent-linux-$(arch).tar.gz"
+}
+
 # build_release writes the assets the installer downloads and signs them
-# with a key generated for this run.
+# with a key generated for this run. The archive holds the given files;
+# by default all four a release has.
 build_release() {
 	local sign_key="${1:-/work/release_key}"
-	mkdir -p "$RELEASE_DIR"
-	printf '#!/bin/sh\necho "kerge-agent %s"\n' "$RELEASE_VERSION" >"$RELEASE_DIR/kerge-agent-linux-$(arch)"
-	chmod 0755 "$RELEASE_DIR/kerge-agent-linux-$(arch)"
-	(cd "$RELEASE_DIR" && sha256sum "kerge-agent-linux-$(arch)" >checksums.txt)
+	shift || true
+	local members=("$@")
+	[ ${#members[@]} -gt 0 ] || members=(kerge-agent LICENSE NOTICE THIRD_PARTY_LICENSES)
+	mkdir -p "$RELEASE_DIR" /work/pkg
+	printf '#!/bin/sh\necho "kerge-agent %s"\n' "$RELEASE_VERSION" >/work/pkg/kerge-agent
+	chmod 0755 /work/pkg/kerge-agent
+	for doc in LICENSE NOTICE THIRD_PARTY_LICENSES; do
+		echo "the $doc text" >"/work/pkg/$doc"
+	done
+	tar -czf "$RELEASE_DIR/$(asset)" -C /work/pkg "${members[@]}"
+	(cd "$RELEASE_DIR" && sha256sum "$(asset)" >checksums.txt)
 
 	ssh-keygen -q -t ed25519 -N '' -C kerge-release -f /work/release_key
 	if [ "$sign_key" != "/work/release_key" ]; then
@@ -85,6 +99,7 @@ assert_not_installed() {
 	[ ! -e /usr/local/bin/kerge-agent ] || fail "a binary was installed although the check failed"
 	[ ! -e /etc/kerge-agent/agent.conf ] || fail "a configuration was written although the check failed"
 	[ ! -e /etc/systemd/system/kerge-agent.service ] || fail "a unit was written although the check failed"
+	[ ! -e "$DOC_DIR" ] || fail "license texts were installed although the check failed"
 	[ ! -s "$SYSTEMCTL_LOG" ] || fail "systemctl was called although the check failed: $(cat "$SYSTEMCTL_LOG")"
 }
 
@@ -106,6 +121,13 @@ assert_installed() {
 	assert_mode /etc/kerge-agent/agent.conf 640
 	assert_owner /etc/kerge-agent/agent.conf root:kerge
 	assert_mode /etc/systemd/system/kerge-agent.service 644
+	local doc
+	for doc in LICENSE NOTICE THIRD_PARTY_LICENSES; do
+		assert_mode "$DOC_DIR/$doc" 644
+		assert_owner "$DOC_DIR/$doc" root:root
+		cmp -s "/work/pkg/$doc" "$DOC_DIR/$doc" || fail "$DOC_DIR/$doc is not the file from the archive"
+	done
+	cmp -s /work/pkg/kerge-agent /usr/local/bin/kerge-agent || fail "the installed binary is not the one from the archive"
 
 	# The unit the installer writes and the one in the repository are the
 	# same file.
@@ -157,17 +179,28 @@ case_reinstall() {
 # A binary that does not match the signed checksums is not installed.
 case_bad_checksum() {
 	setup
-	printf 'tampered\n' >>"$RELEASE_DIR/kerge-agent-linux-$(arch)"
+	printf 'tampered\n' >>"$RELEASE_DIR/$(asset)"
 	if "$INSTALLER" --server wss://panel.example.com/api/agent/ws --token t 2>/work/err; then
 		fail "the installer accepted a binary with the wrong checksum"
 	fi
 	grep -q 'checksum' /work/err || fail "the error does not mention the checksum: $(cat /work/err)"
 	assert_not_installed
-	pass "a tampered binary is refused"
+	pass "a tampered archive is refused"
 }
 
 # Checksums signed with another key are not installed, however valid the
 # signature is in itself.
+# A correctly signed archive that lacks one of its files is not installed.
+case_incomplete_archive() {
+	setup /work/release_key kerge-agent LICENSE NOTICE
+	if "$INSTALLER" --server wss://panel.example.com/api/agent/ws --token t 2>/work/err; then
+		fail "the installer accepted an archive without THIRD_PARTY_LICENSES"
+	fi
+	grep -q 'expected files' /work/err || fail "unexpected error: $(cat /work/err)"
+	assert_not_installed
+	pass "an archive that lacks a file is refused"
+}
+
 case_bad_signature() {
 	setup /work/attacker_key
 	if "$INSTALLER" --server wss://panel.example.com/api/agent/ws --token t 2>/work/err; then
@@ -215,7 +248,7 @@ case_uninstall() {
 
 	"$INSTALLER" --uninstall
 	grep -q '^disable --now kerge-agent$' "$SYSTEMCTL_LOG" || fail "the service was not disabled"
-	for path in /usr/local/bin/kerge-agent /etc/kerge-agent /etc/systemd/system/kerge-agent.service /var/lib/kerge-agent; do
+	for path in /usr/local/bin/kerge-agent /etc/kerge-agent /etc/systemd/system/kerge-agent.service /var/lib/kerge-agent "$DOC_DIR"; do
 		[ ! -e "$path" ] || fail "$path survived the uninstall"
 	done
 	! getent passwd kerge >/dev/null || fail "the kerge user survived the uninstall"

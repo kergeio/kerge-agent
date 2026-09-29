@@ -43,12 +43,14 @@ before it runs. The token can be used once.
 
 `install-agent.sh` then:
 
-1. downloads the agent binary and `checksums.txt` of the same release,
-   and stops unless `checksums.txt` carries a valid OpenSSH signature by
-   the release key built into the script, and the binary matches it;
+1. downloads the agent archive for the host's architecture and
+   `checksums.txt` of the same release, and stops unless `checksums.txt`
+   carries a valid OpenSSH signature by the release key built into the
+   script, and the archive matches it;
 2. creates the system user `kerge` (no login shell, no home directory);
 3. writes `/etc/kerge-agent/agent.conf` (owner `root:kerge`, mode 640);
-4. installs `/usr/local/bin/kerge-agent` and the systemd unit
+4. installs `/usr/local/bin/kerge-agent`, the license texts in
+   `/usr/share/doc/kerge-agent/`, and the systemd unit
    `kerge-agent.service`, and starts it.
 
 Running the script again reinstalls the agent and keeps
@@ -58,7 +60,7 @@ given. Other options:
 | Option | Effect |
 |---|---|
 | `--version <v>` | install that release instead of the script's own |
-| `--uninstall` | stop the service and remove the binary, the configuration, the state directory and the `kerge` user |
+| `--uninstall` | stop the service and remove the binary, the configuration, the state directory, the license texts and the `kerge` user |
 
 ### sha256 of install-agent.sh
 
@@ -81,20 +83,25 @@ Fingerprint `SHA256:o8FwbEF+/tiVjyIxLZp+Pg5WlDcSu5M5dJgY5WgwMiM`.
 
 ## Manual installation
 
-To install without the script, on a host of either architecture
-(`amd64` below):
+Each release has an archive per architecture,
+`kerge-agent-linux-amd64.tar.gz` and `kerge-agent-linux-arm64.tar.gz`,
+holding the binary `kerge-agent` with `LICENSE`, `NOTICE` and
+`THIRD_PARTY_LICENSES`. To install without the script (`amd64` below):
 
 ```
 v=0.1.0
 base=https://github.com/kergeio/kerge-agent/releases/download/v$v
-curl -fsSLO "$base/kerge-agent-linux-amd64" -O "$base/checksums.txt" -O "$base/checksums.txt.sig"
+curl -fsSLO "$base/kerge-agent-linux-amd64.tar.gz" -O "$base/checksums.txt" -O "$base/checksums.txt.sig"
 
-# The signature, then the binary.
+# The signature, then the archive.
 echo 'releases@kerge.io namespaces="kerge-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMMWMoTwuKCmpyWran5GZp5KiZuOIt6N/vzcfZsrdfpH' > allowed_signers
 ssh-keygen -Y verify -f allowed_signers -I releases@kerge.io -n kerge-release -s checksums.txt.sig < checksums.txt
 sha256sum -c --ignore-missing checksums.txt
 
-sudo install -o root -g root -m 0755 kerge-agent-linux-amd64 /usr/local/bin/kerge-agent
+tar -xzf kerge-agent-linux-amd64.tar.gz
+sudo install -o root -g root -m 0755 kerge-agent /usr/local/bin/kerge-agent
+sudo install -d /usr/share/doc/kerge-agent
+sudo install -m 0644 LICENSE NOTICE THIRD_PARTY_LICENSES /usr/share/doc/kerge-agent/
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin kerge
 ```
 
@@ -163,3 +170,8 @@ see its `PROTOCOL.md`.
 ## License
 
 Apache License 2.0. See `LICENSE` and `NOTICE`.
+
+The agent binary contains third-party code under its own licenses: the
+Go standard library and the modules from `go.mod` that it is built from. Each release
+archive carries their texts in `THIRD_PARTY_LICENSES`, and the install
+script puts it in `/usr/share/doc/kerge-agent/`.
