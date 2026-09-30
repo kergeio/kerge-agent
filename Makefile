@@ -4,10 +4,10 @@ BIN := bin
 GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@v1.8.0
 SHELLCHECK_IMAGE := koalaman/shellcheck:v0.11.0
 SHELL_SCRIPTS := scripts/install-agent.sh scripts/check-no-exec.sh scripts/test-install-agent.sh scripts/testdata/install-cases.sh \
-	scripts/release-assets.sh scripts/release-verify.sh scripts/release-preflight.sh scripts/third-party-licenses.sh
+	scripts/release-assets.sh scripts/release-verify.sh scripts/release-preflight.sh scripts/third-party-licenses.sh scripts/check-deps.sh
 VERSION ?= dev
 
-.PHONY: all build test lint fmt-check vet langcheck no-exec shellcheck install-test commitcheck dcocheck vuln check clean
+.PHONY: all build test lint fmt-check vet langcheck no-exec deps shellcheck install-test commitcheck dcocheck vuln check clean
 
 all: check
 
@@ -19,8 +19,8 @@ build:
 test:
 	$(GO) test -race ./...
 
-## lint: formatting, vet, English-only check, os/exec check, shell scripts
-lint: fmt-check vet langcheck no-exec shellcheck
+## lint: formatting, vet, English-only check, os/exec check, dependency direction, shell scripts
+lint: fmt-check vet langcheck no-exec deps shellcheck
 
 fmt-check:
 	@out=$$(gofmt -l .); if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
@@ -34,6 +34,10 @@ langcheck:
 ## no-exec: the agent must never start a process
 no-exec:
 	./scripts/check-no-exec.sh
+
+## deps: the agent must not depend on the panel
+deps:
+	./scripts/check-deps.sh
 
 ## shellcheck: lint the shell scripts, through docker when it is not installed
 shellcheck:
