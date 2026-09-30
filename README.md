@@ -6,8 +6,9 @@ WebSocket connection.
 
 ## Status
 
-Pre-release. Release candidates (`v0.1.0-rc.N`) are published for
-testing; the first release is v0.1.0.
+Released. The current version is on the
+[releases page](https://github.com/kergeio/kerge-agent/releases/latest);
+changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What it does, and what it cannot do
 
