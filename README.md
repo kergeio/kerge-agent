@@ -69,7 +69,7 @@ Each release lists it in its release notes. For the releases so far:
 
 | Release | sha256 of `install-agent.sh` |
 |---|---|
-| none yet | |
+| v0.1.0 | `25e76cc485b6c2e1398f30b5bfaeb99cd266499dc2532d7f635b2d25b5169b83` |
 
 ### The release key
 
