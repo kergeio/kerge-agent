@@ -28,8 +28,13 @@ const (
 	DefaultHandshakeTimeout = 10 * time.Second
 	DefaultRegisterTimeout  = 10 * time.Second
 	DefaultWriteTimeout     = 5 * time.Second
-	DefaultMinBackoff       = time.Second
-	DefaultMaxBackoff       = 60 * time.Second
+	// The agent pings the panel as the panel pings the agent: a
+	// connection whose path died without a reset otherwise looks alive
+	// until TCP gives up, which takes about a quarter of an hour.
+	DefaultPingInterval = 30 * time.Second
+	DefaultPingTimeout  = 10 * time.Second
+	DefaultMinBackoff   = time.Second
+	DefaultMaxBackoff   = 60 * time.Second
 )
 
 // Options configure a Client.
@@ -48,6 +53,8 @@ type Options struct {
 	HandshakeTimeout time.Duration
 	RegisterTimeout  time.Duration
 	WriteTimeout     time.Duration
+	PingInterval     time.Duration
+	PingTimeout      time.Duration
 	MinBackoff       time.Duration
 	MaxBackoff       time.Duration
 
@@ -79,6 +86,8 @@ func New(opts Options) (*Client, error) {
 	setDefault(&opts.HandshakeTimeout, DefaultHandshakeTimeout)
 	setDefault(&opts.RegisterTimeout, DefaultRegisterTimeout)
 	setDefault(&opts.WriteTimeout, DefaultWriteTimeout)
+	setDefault(&opts.PingInterval, DefaultPingInterval)
+	setDefault(&opts.PingTimeout, DefaultPingTimeout)
 	setDefault(&opts.MinBackoff, DefaultMinBackoff)
 	setDefault(&opts.MaxBackoff, DefaultMaxBackoff)
 	if opts.randFloat == nil {
@@ -175,12 +184,17 @@ func (c *Client) session(ctx context.Context, hostInfo func(context.Context) *pr
 
 	readErr := make(chan error, 1)
 	go func() { readErr <- c.read(ctx, conn, enrolling) }()
+	// The pings rely on the read above, which is what takes in the pongs.
+	pingErr := make(chan error, 1)
+	go func() { pingErr <- c.ping(ctx, conn) }()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return true, nil
 		case err := <-readErr:
+			return true, err
+		case err := <-pingErr:
 			return true, err
 		case <-c.q.signal:
 			m := c.q.take()
@@ -279,6 +293,30 @@ func panelMessageError(msg protocol.PanelMessage) error {
 		return errors.New("transport: the panel sent an unexpected registration result")
 	default:
 		return fmt.Errorf("transport: unexpected %T from the panel", msg)
+	}
+}
+
+// ping checks every PingInterval that the panel still answers, and returns
+// an error when it does not within PingTimeout. Writes alone do not tell:
+// they land in the socket buffer whether or not the panel is still there.
+func (c *Client) ping(ctx context.Context, conn *websocket.Conn) error {
+	t := time.NewTicker(c.opts.PingInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.C:
+			pingCtx, cancel := context.WithTimeout(ctx, c.opts.PingTimeout)
+			err := conn.Ping(pingCtx)
+			cancel()
+			if err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				return fmt.Errorf("transport: the panel did not answer a ping: %w", err)
+			}
+		}
 	}
 }
 

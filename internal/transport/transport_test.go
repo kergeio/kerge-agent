@@ -578,3 +578,67 @@ func TestPanelThatAgreesToNoVersion(t *testing.T) {
 		return
 	}
 }
+
+// A panel that stops answering pings is given up on and dialed again,
+// even though writes to it would still succeed.
+func TestUnansweredPingEndsTheConnection(t *testing.T) {
+	p := newPanel(t)
+	c, _ := testClient(t, p, "", testAgent+"."+testSecret)
+	c.opts.PingInterval = 50 * time.Millisecond
+	c.opts.PingTimeout = 100 * time.Millisecond
+	start(t, c)
+
+	first := p.accept()
+	if _, ok := first.recv(t).(*protocol.HostInfo); !ok {
+		t.Fatal("the agent did not send host_info")
+	}
+	// The panel side stops reading here, so no pong goes back.
+
+	second := p.accept()
+	if _, ok := second.recv(t).(*protocol.HostInfo); !ok {
+		t.Fatal("the agent did not send host_info after reconnecting")
+	}
+}
+
+// A panel that answers keeps the connection, however often it is pinged.
+func TestAnsweredPingsKeepTheConnection(t *testing.T) {
+	p := newPanel(t)
+	c, _ := testClient(t, p, "", testAgent+"."+testSecret)
+	c.opts.PingInterval = 10 * time.Millisecond
+	c.opts.PingTimeout = time.Second
+	start(t, c)
+
+	first := p.accept()
+	// Reading is what answers the pings, as on the real panel.
+	got := make(chan protocol.AgentMessage, 16)
+	go func() {
+		for {
+			_, data, err := first.conn.Read(t.Context())
+			if err != nil {
+				return
+			}
+			if msg, err := protocol.DecodeAgentMessage(data); err == nil {
+				got <- msg
+			}
+		}
+	}()
+
+	time.Sleep(300 * time.Millisecond)
+	c.Send(sample(7))
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case msg := <-got:
+			if m, ok := msg.(*protocol.Metrics); ok && m.TS == 7 {
+				select {
+				case <-p.conns:
+					t.Fatal("the agent reconnected although the panel answered every ping")
+				default:
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatal("the sample did not arrive on the first connection")
+		}
+	}
+}
