@@ -90,7 +90,7 @@ holding the binary `kerge-agent` with `LICENSE`, `NOTICE` and
 `THIRD_PARTY_LICENSES`. To install without the script (`amd64` below):
 
 ```
-v=0.1.0
+v=0.1.1
 base=https://github.com/kergeio/kerge-agent/releases/download/v$v
 curl -fsSLO "$base/kerge-agent-linux-amd64.tar.gz" -O "$base/checksums.txt" -O "$base/checksums.txt.sig"
 

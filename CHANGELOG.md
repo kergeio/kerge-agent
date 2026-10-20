@@ -5,6 +5,21 @@ Notable changes to the Kerge agent. The format follows
 follow [Semantic Versioning](https://semver.org/). Release candidates
 are not listed separately.
 
+## [0.1.1] - 2026-10-20
+
+### Fixed
+
+- The agent pings the panel every 30 seconds and reconnects when no
+  answer comes within 10 seconds. A connection whose network path died
+  without a reset, such as one through a lost NAT entry, went unnoticed
+  until TCP gave up, about a quarter of an hour, and the reports of that
+  time were lost.
+
+### Security
+
+- Built with Go 1.27.2, which fixes vulnerabilities in the standard
+  library.
+
 ## [0.1.0] - 2026-09-30
 
 The first release.
